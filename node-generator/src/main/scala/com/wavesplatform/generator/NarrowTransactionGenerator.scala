@@ -97,8 +97,8 @@ class NarrowTransactionGenerator(
                 useAlias = random.nextBoolean()
                 recipient <- if (useAlias && aliases.nonEmpty) randomFrom(aliases).map(_.alias) else randomFrom(accounts).map(_.toAddress)
                 tx <- logOption(
-                  TransferTransaction
-                    .selfSigned(
+                  SignedTx
+                    .transfer(
                       correctVersion(TxVersion.V2),
                       sender,
                       recipient,
@@ -109,6 +109,7 @@ class NarrowTransactionGenerator(
                       createAttachment(),
                       timestamp
                     )
+                    .validatedEither
                 )
               } yield tx
             ).logNone("There is no issued assets, may be you need to increase issue transaction's probability or pre-configure them")
@@ -158,8 +159,18 @@ class NarrowTransactionGenerator(
                 seller  <- randomFrom(Universe.Accounts).map(_.keyPair)
                 buyer   <- randomFrom(Universe.Accounts).map(_.keyPair)
                 pair    <- preconditions.tradeAsset.map(a => AssetPair(Waves, IssuedAsset(a.id())))
-                delta     = random.nextLong(10000)
-                sellOrder = Order.sell(Order.V2, seller, matcher.publicKey, pair, 10000000 + delta, 10, timestamp, timestamp + 30.days.toMillis, 300000L)
+                delta = random.nextLong(10000)
+                sellOrder = Order.sell(
+                  Order.V2,
+                  seller,
+                  matcher.publicKey,
+                  pair,
+                  10000000 + delta,
+                  10,
+                  timestamp,
+                  timestamp + 30.days.toMillis,
+                  300000L
+                )
                 buyOrder = Order.buy(
                   Order.V2,
                   buyer,
@@ -500,9 +511,7 @@ object NarrowTransactionGenerator {
 
               val account = GeneratorSettings.toKeyPair(s"${UUID.randomUUID().toString}")
 
-              val transferTx = TransferTransaction
-                .selfSigned(2.toByte, richAccount, account.toAddress, Waves, balance, Waves, fee, None, time.correctedTime())
-                .explicitGet()
+              val transferTx = SignedTx.transfer(2.toByte, richAccount, account.toAddress, Waves, balance, Waves, fee, None, time.correctedTime())
 
               val Right((script, _)) = ScriptCompiler.compile(new String(Files.readAllBytes(Paths.get(scriptFile))), estimator)
               val scriptTx           = SetScriptTransaction.selfSigned(TxVersion.V1, account, Some(script), fee, time.correctedTime()).explicitGet()
@@ -561,20 +570,17 @@ object NarrowTransactionGenerator {
 
       val tradeAssetDistribution: Seq[Transaction] = {
         (Universe.Accounts.map(_.keyPair).toSet - trader).toSeq.map(acc => {
-          TransferTransaction
-            .selfSigned(
-              TxVersion.V2,
-              trader,
-              acc.toAddress,
-              IssuedAsset(tradeAsset.id()),
-              tradeAsset.quantity / Universe.Accounts.size,
-              Waves,
-              900000,
-              Some(Attachment.Bin(Array.fill(random.nextInt(100))(random.nextInt().toByte))),
-              System.currentTimeMillis()
-            )
-            .right
-            .get
+          SignedTx.transfer(
+            TxVersion.V2,
+            trader,
+            acc.toAddress,
+            IssuedAsset(tradeAsset.id()),
+            tradeAsset.quantity / Universe.Accounts.size,
+            Waves,
+            900000,
+            Some(Attachment.Bin(Array.fill(random.nextInt(100))(random.nextInt().toByte))),
+            System.currentTimeMillis()
+          )
         })
       }
 

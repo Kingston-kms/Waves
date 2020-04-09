@@ -197,7 +197,7 @@ class BlockchainUpdaterImpl(
                     val reward            = nextReward()
                     BlockDiffer
                       .fromBlock(
-                        CompositeBlockchain(leveldb, carry = leveldb.carryFee, reward = reward),
+                        CompositeBlockchain(leveldb, maybeReward = reward),
                         leveldb.lastBlock,
                         block,
                         miningConstraints.total,
@@ -215,7 +215,7 @@ class BlockchainUpdaterImpl(
 
                     BlockDiffer
                       .fromBlock(
-                        CompositeBlockchain(leveldb, carry = leveldb.carryFee, reward = ng.reward),
+                        CompositeBlockchain(leveldb, maybeReward = ng.reward),
                         leveldb.lastBlock,
                         block,
                         miningConstraints.total,
@@ -240,7 +240,7 @@ class BlockchainUpdaterImpl(
 
                       BlockDiffer
                         .fromBlock(
-                          CompositeBlockchain(leveldb, carry = leveldb.carryFee, reward = ng.reward),
+                          CompositeBlockchain(leveldb, maybeReward = ng.reward),
                           leveldb.lastBlock,
                           block,
                           miningConstraints.total,
@@ -283,7 +283,7 @@ class BlockchainUpdaterImpl(
 
                         val diff = BlockDiffer
                           .fromBlock(
-                            CompositeBlockchain(leveldb, Some(liquidDiffWithCancelledLeases), Some(referencedForgedBlock), carry, reward),
+                            CompositeBlockchain(leveldb, Some(liquidDiffWithCancelledLeases), Some(referencedForgedBlock), Some(carry), reward),
                             Some(referencedForgedBlock),
                             block,
                             constraint,

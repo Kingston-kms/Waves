@@ -1,6 +1,6 @@
 package com.wavesplatform.api.http.requests
 
-import com.wavesplatform.account.{AddressOrAlias, PublicKey}
+import com.wavesplatform.account.{AddressOrAlias, AddressScheme, PublicKey}
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.transaction.transfer.{Attachment, TransferTransaction}
@@ -19,13 +19,14 @@ case class TransferRequest(
     attachment: Option[Attachment],
     timestamp: Option[Long],
     signature: Option[ByteStr],
-    proofs: Option[Proofs]
+    proofs: Option[Proofs],
+    chainId: Option[Byte]
 ) extends TxBroadcastRequest {
   def toTxFrom(sender: PublicKey): Either[ValidationError, TransferTransaction] =
     for {
       validRecipient <- AddressOrAlias.fromString(recipient)
       validProofs    <- toProofs(signature, proofs)
-      tx <- TransferTransaction.create(
+      tx <- TransferTransaction(
         version.getOrElse(1.toByte),
         sender,
         validRecipient,
@@ -35,8 +36,9 @@ case class TransferRequest(
         fee,
         attachment,
         timestamp.getOrElse(0L),
-        validProofs
-      )
+        validProofs,
+        chainId.getOrElse(AddressScheme.current.chainId)
+      ).validatedEither
     } yield tx
 }
 

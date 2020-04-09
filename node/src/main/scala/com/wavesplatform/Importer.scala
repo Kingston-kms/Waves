@@ -9,10 +9,9 @@ import com.wavesplatform.account.{Address, AddressScheme}
 import com.wavesplatform.block.Block
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.consensus.PoSSelector
-import com.wavesplatform.database.openDB
+import com.wavesplatform.database.{StorageFactory, openDB}
 import com.wavesplatform.events.{BlockchainUpdateTriggersImpl, BlockchainUpdated, UtxEvent}
 import com.wavesplatform.extensions.{Context, Extension}
-import com.wavesplatform.history.StorageFactory
 import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.protobuf.block.PBBlocks
 import com.wavesplatform.settings.WavesSettings
@@ -36,7 +35,7 @@ import scala.util.Success
 object Importer extends ScorexLogging {
   import monix.execution.Scheduler.Implicits.global
 
-  type AppendBlock = Block => Task[Either[ValidationError, Option[BigInt]]]
+  type AppendBlock = Block => Either[ValidationError, Option[BigInt]]
 
   final case class ImportOptions(
       configFile: File = new File("waves-testnet.conf"),
@@ -137,7 +136,6 @@ object Importer extends ScorexLogging {
   private val lock = new Object
 
   def startImport(
-      scheduler: Scheduler,
       bis: BufferedInputStream,
       blockchainUpdater: Blockchain,
       appendBlock: AppendBlock,
@@ -169,7 +167,7 @@ object Importer extends ScorexLogging {
               else PBBlocks.vanilla(PBBlocks.addChainId(protobuf.block.PBBlock.parseFrom(buffer)), unsafe = true)
 
             if (blockchainUpdater.lastBlockId.contains(block.header.reference)) {
-              Await.result(appendBlock(block).runAsyncLogErr, Duration.Inf) match {
+              appendBlock(block) match {
                 case Left(ve) =>
                   log.error(s"Error appending block: $ve")
                   quit = true
@@ -211,7 +209,7 @@ object Importer extends ScorexLogging {
       StorageFactory(settings, db, time, Observer.empty, blockchainUpdateTriggers)
     val utxPool     = new UtxPoolImpl(time, blockchainUpdater, PublishSubject(), settings.utxSettings, enablePriorityPool = false)
     val pos         = new PoSSelector(blockchainUpdater, settings.blockchainSettings, settings.synchronizationSettings)
-    val extAppender = BlockAppender(blockchainUpdater, time, utxPool, pos, scheduler, importOptions.verify) _
+    val extAppender = BlockAppender.doApply(blockchainUpdater, time, utxPool, pos, importOptions.verify) _
 
     checkGenesis(settings, blockchainUpdater)
     val extensions = initExtensions(settings, blockchainUpdater, scheduler, time, utxPool, blockchainUpdated)
@@ -227,6 +225,6 @@ object Importer extends ScorexLogging {
       }
     }
 
-    startImport(scheduler, bis, blockchainUpdater, extAppender, importOptions)
+    startImport(bis, blockchainUpdater, extAppender, importOptions)
   }
 }

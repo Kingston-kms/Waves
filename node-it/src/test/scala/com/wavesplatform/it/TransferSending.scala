@@ -11,6 +11,7 @@ import com.wavesplatform.it.TransferSending.Req
 import com.wavesplatform.it.api.AsyncHttpApi._
 import com.wavesplatform.it.api.Transaction
 import com.wavesplatform.transaction.Asset.Waves
+import com.wavesplatform.transaction.SignedTx
 import com.wavesplatform.transaction.transfer._
 import com.wavesplatform.utils.ScorexLogging
 import org.scalatest.Suite
@@ -115,8 +116,7 @@ trait TransferSending extends ScorexLogging {
       .map {
         case (x, i) =>
           createSignedTransferRequest(
-            TransferTransaction
-              .selfSigned(
+            SignedTx.transfer(
                 version = 2.toByte,
                 sender = KeyPair(Base58.decode(x.senderSeed)),
                 recipient = AddressOrAlias.fromString(x.targetAddress).explicitGet(),
@@ -130,8 +130,6 @@ trait TransferSending extends ScorexLogging {
                   else None,
                 timestamp = start + i
               )
-              .right
-              .get
           )
       }
       .grouped(requests.size / nodes.size + 1)
@@ -165,7 +163,8 @@ trait TransferSending extends ScorexLogging {
       attachment,
       Some(timestamp),
       None,
-      Some(proofs)
+      Some(proofs),
+      None
     )
   }
 

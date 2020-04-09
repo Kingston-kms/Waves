@@ -2,16 +2,14 @@ package com.wavesplatform.it.sync
 
 import com.typesafe.config.Config
 import com.wavesplatform.account.KeyPair
-import com.wavesplatform.common.utils._
 import com.wavesplatform.it._
 import com.wavesplatform.it.api.AsyncHttpApi._
 import com.wavesplatform.it.api._
 import com.wavesplatform.it.transactions.BaseTransactionSuiteLike
 import com.wavesplatform.it.util._
 import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
-import com.wavesplatform.transaction.TxVersion
 import com.wavesplatform.transaction.assets.IssueTransaction
-import com.wavesplatform.transaction.transfer.TransferTransaction
+import com.wavesplatform.transaction.{SignedTx, TxVersion}
 import com.wavesplatform.utils._
 import org.scalatest.FreeSpec
 import play.api.libs.json._
@@ -85,11 +83,7 @@ class NFTBalanceSuite extends FreeSpec with BaseTransactionSuiteLike {
 
     "returns only nft with balance > 0 on /nft/{address}/limit/{limit}" in {
       val other = KeyPair("other".getBytes)
-
-      val transfer = TransferTransaction
-        .selfSigned(1.toByte, issuer, other.toAddress, randomTokenToTransfer, 1, Waves, 0.001.waves, None, System.currentTimeMillis())
-        .explicitGet()
-
+      val transfer = SignedTx.transfer(1.toByte, issuer, other.toAddress, randomTokenToTransfer, 1, Waves, 0.001.waves, None, System.currentTimeMillis())
       val assertion = for {
         tx         <- node.signedBroadcast(transfer.json())
         _          <- node.waitForTransaction(tx.id)

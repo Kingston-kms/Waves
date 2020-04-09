@@ -12,8 +12,7 @@ import com.wavesplatform.transaction.assets.IssueTransaction
 import com.wavesplatform.transaction.lease.LeaseTransaction
 import com.wavesplatform.transaction.smart.SetScriptTransaction
 import com.wavesplatform.transaction.smart.script.ScriptCompiler
-import com.wavesplatform.transaction.transfer.TransferTransaction
-import com.wavesplatform.transaction.{Transaction, TxVersion}
+import com.wavesplatform.transaction.{SignedTx, Transaction, TxVersion}
 import com.wavesplatform.utils.Time
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ValueReader
@@ -78,10 +77,8 @@ object Preconditions {
               (uni.copy(issuedAssets = tx :: uni.issuedAssets), tx :: txs)
 
             case CreateAccountP(seed, balance, scriptOption) =>
-              val acc = GeneratorSettings.toKeyPair(seed)
-              val transferTx = TransferTransaction
-                .selfSigned(2.toByte, settings.faucet, acc.toAddress, Waves, balance, Waves, Fee, None, time.correctedTime())
-                .explicitGet()
+              val acc        = GeneratorSettings.toKeyPair(seed)
+              val transferTx = SignedTx.transfer(2.toByte, settings.faucet, acc.toAddress, Waves, balance, Waves, Fee, None, time.correctedTime())
               val scriptAndTx = scriptOption.map { file =>
                 val scriptText         = new String(Files.readAllBytes(Paths.get(file)))
                 val Right((script, _)) = ScriptCompiler.compile(scriptText, estimator)
@@ -97,19 +94,17 @@ object Preconditions {
     val tailTransactions = holder.issuedAssets.flatMap { issuedAsset =>
       val balance = issuedAsset.quantity / holder.accounts.size
       holder.accounts.map { acc =>
-        TransferTransaction
-          .selfSigned(
-            2.toByte,
-            settings.faucet,
-            acc.keyPair.toAddress,
-            IssuedAsset(issuedAsset.assetId),
-            balance,
-            Waves,
-            Fee,
-            None,
-            time.correctedTime()
-          )
-          .explicitGet()
+        SignedTx.transfer(
+          2.toByte,
+          settings.faucet,
+          acc.keyPair.toAddress,
+          IssuedAsset(issuedAsset.assetId),
+          balance,
+          Waves,
+          Fee,
+          None,
+          time.correctedTime()
+        )
       }
     }
 
