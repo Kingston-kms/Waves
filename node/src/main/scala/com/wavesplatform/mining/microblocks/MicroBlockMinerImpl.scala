@@ -74,20 +74,23 @@ class MicroBlockMinerImpl(
           def pack(
               prev: (Option[Seq[Transaction]], MiningConstraint) = (None, MultiDimensionalMiningConstraint(restTotalConstraint, constraints.micro))
           ): (Option[Seq[Transaction]], MiningConstraint) = {
-            val mdConstraint                       = MultiDimensionalMiningConstraint(restTotalConstraint, constraints.micro)
-            val allowedTime                        = settings.microBlockInterval - (System.nanoTime() - startTime).nanos
-            val (unconfirmed, updatedMdConstraint) = utx.packUnconfirmed(mdConstraint, allowedTime)
-            val elapsed                            = (System.nanoTime() - startTime).nanos
-            val current                            = (unconfirmed, updatedMdConstraint.constraints.head)
+            val mdConstraint = MultiDimensionalMiningConstraint(restTotalConstraint, constraints.micro)
+            val allowedTime  = settings.microBlockInterval - (System.nanoTime() - startTime).nanos
+            if (allowedTime <= Duration.Zero) prev
+            else {
+              val (unconfirmed, updatedMdConstraint) = utx.packUnconfirmed(mdConstraint, allowedTime)
+              val elapsed                            = (System.nanoTime() - startTime).nanos
+              val current                            = (unconfirmed, updatedMdConstraint.constraints.head)
 
-            if (unconfirmed.isEmpty) current
-            else if (updatedMdConstraint.isFull || (unconfirmed.exists(_.nonEmpty) && elapsed >= settings.microBlockInterval)) {
-              val lastTxs    = prev._1.fold(0)(_.length)
-              val currentTxs = current._1.fold(0)(_.length)
-              if (lastTxs > currentTxs) prev else current
-            } else {
-              Thread.sleep(100)
-              pack(current)
+              if (unconfirmed.isEmpty) current
+              else if (updatedMdConstraint.isFull || (unconfirmed.exists(_.nonEmpty) && elapsed >= settings.microBlockInterval)) {
+                val lastTxs    = prev._1.fold(0)(_.length)
+                val currentTxs = current._1.fold(0)(_.length)
+                if (lastTxs > currentTxs) prev else current
+              } else {
+                Thread.sleep(100)
+                pack(current)
+              }
             }
           }
 
