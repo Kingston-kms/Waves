@@ -22,6 +22,7 @@ import kamon.metric.TimerMetric
 import monix.eval.Task
 import monix.execution.schedulers.SchedulerService
 
+import scala.annotation.tailrec
 import scala.concurrent.duration._
 
 class MicroBlockMinerImpl(
@@ -40,21 +41,17 @@ class MicroBlockMinerImpl(
   def generateMicroBlockSequence(
       account: KeyPair,
       accumulatedBlock: Block,
-      delay: FiniteDuration,
       constraints: MiningConstraints,
       restTotalConstraint: MiningConstraint
   ): Task[Unit] = {
     generateOneMicroBlockTask(account, accumulatedBlock, constraints, restTotalConstraint)
       .asyncBoundary(minerScheduler)
-      .timed
-      .delayExecution(delay)
       .flatMap {
-        case (t, Success(newBlock, newConstraint)) =>
-          log.info(f"Next mining scheduled in ${(settings.microBlockInterval - t).toUnit(SECONDS)}%.3f seconds")
-          generateMicroBlockSequence(account, newBlock, settings.microBlockInterval - t, constraints, newConstraint)
-        case (_, Retry) =>
-          generateMicroBlockSequence(account, accumulatedBlock, settings.microBlockInterval, constraints, restTotalConstraint)
-        case (_, Stop) =>
+        case Success(newBlock, newConstraint) =>
+          generateMicroBlockSequence(account, newBlock, constraints, newConstraint)
+        case Retry =>
+          generateMicroBlockSequence(account, accumulatedBlock, constraints, restTotalConstraint)
+        case Stop =>
           debugState
             .set(MinerDebugInfo.MiningBlocks) >>
             Task(log.debug("MicroBlock mining completed, block is full"))
@@ -71,9 +68,30 @@ class MicroBlockMinerImpl(
     Task
       .defer {
         val (maybeUnconfirmed, updatedTotalConstraint) = Instrumented.logMeasure(log, "packing unconfirmed transactions for microblock") {
-          val mdConstraint                       = MultiDimensionalMiningConstraint(restTotalConstraint, constraints.micro)
-          val (unconfirmed, updatedMdConstraint) = utx.packUnconfirmed(mdConstraint, settings.maxPackTime)
-          (unconfirmed, updatedMdConstraint.constraints.head)
+          val startTime = System.nanoTime()
+
+          @tailrec
+          def pack(
+              prev: (Option[Seq[Transaction]], MiningConstraint) = (None, MultiDimensionalMiningConstraint(restTotalConstraint, constraints.micro))
+          ): (Option[Seq[Transaction]], MiningConstraint) = {
+            val mdConstraint                       = MultiDimensionalMiningConstraint(restTotalConstraint, constraints.micro)
+            val allowedTime                        = settings.microBlockInterval - (System.nanoTime() - startTime).nanos
+            val (unconfirmed, updatedMdConstraint) = utx.packUnconfirmed(mdConstraint, allowedTime)
+            val elapsed                            = (System.nanoTime() - startTime).nanos
+            val current                            = (unconfirmed, updatedMdConstraint.constraints.head)
+
+            if (unconfirmed.isEmpty) current
+            else if (updatedMdConstraint.isFull || (unconfirmed.exists(_.nonEmpty) && elapsed >= settings.microBlockInterval)) {
+              val lastTxs    = prev._1.fold(0)(_.length)
+              val currentTxs = current._1.fold(0)(_.length)
+              if (lastTxs > currentTxs) prev else current
+            } else {
+              Thread.sleep(100)
+              pack(current)
+            }
+          }
+
+          pack()
         }
 
         maybeUnconfirmed match {
@@ -90,7 +108,7 @@ class MicroBlockMinerImpl(
                 .liftTo[Task]
               (signedBlock, microBlock) = blocks
               blockId <- appendMicroBlock(microBlock)
-              _ <- broadcastMicroBlock(account, microBlock, blockId)
+              _       <- broadcastMicroBlock(account, microBlock, blockId)
             } yield {
               if (updatedTotalConstraint.isFull) Stop
               else Success(signedBlock, updatedTotalConstraint)
