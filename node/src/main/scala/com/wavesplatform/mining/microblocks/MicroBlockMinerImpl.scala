@@ -22,7 +22,6 @@ import kamon.metric.TimerMetric
 import monix.eval.Task
 import monix.execution.schedulers.SchedulerService
 
-import scala.annotation.tailrec
 import scala.concurrent.duration._
 
 class MicroBlockMinerImpl(
@@ -45,12 +44,12 @@ class MicroBlockMinerImpl(
       restTotalConstraint: MiningConstraint
   ): Task[Unit] = {
     generateOneMicroBlockTask(account, accumulatedBlock, constraints, restTotalConstraint)
-      .asyncBoundary(minerScheduler)
+      .executeOn(minerScheduler)
       .flatMap {
         case Success(newBlock, newConstraint) =>
           generateMicroBlockSequence(account, newBlock, constraints, newConstraint)
         case Retry =>
-          generateMicroBlockSequence(account, accumulatedBlock, constraints, restTotalConstraint)
+          Task.sleep(settings.microBlockInterval).flatMap(_ => generateMicroBlockSequence(account, accumulatedBlock, constraints, restTotalConstraint))
         case Stop =>
           debugState
             .set(MinerDebugInfo.MiningBlocks) >>
@@ -64,68 +63,39 @@ class MicroBlockMinerImpl(
       accumulatedBlock: Block,
       constraints: MiningConstraints,
       restTotalConstraint: MiningConstraint
-  ): Task[MicroBlockMiningResult] =
-    Task
-      .defer {
-        val (maybeUnconfirmed, updatedTotalConstraint) = Instrumented.logMeasure(log, "packing unconfirmed transactions for microblock") {
-          val startTime = System.nanoTime()
+  ): Task[MicroBlockMiningResult] = Task.defer {
+    val mdConstraint = MultiDimensionalMiningConstraint(restTotalConstraint, constraints.micro)
+    val (unconfirmed, updatedTotalConstraint) = utx.packUnconfirmed(mdConstraint, settings.microBlockInterval, settings.microBlockInterval)
 
-          @tailrec
-          def pack(
-              prev: (Option[Seq[Transaction]], MiningConstraint) = (None, MultiDimensionalMiningConstraint(restTotalConstraint, constraints.micro))
-          ): (Option[Seq[Transaction]], MiningConstraint) = {
-            val mdConstraint = MultiDimensionalMiningConstraint(restTotalConstraint, constraints.micro)
-            val allowedTime  = settings.microBlockInterval - (System.nanoTime() - startTime).nanos
-            if (allowedTime <= Duration.Zero) prev
-            else {
-              val (unconfirmed, updatedMdConstraint) = utx.packUnconfirmed(mdConstraint, allowedTime)
-              val elapsed                            = (System.nanoTime() - startTime).nanos
-              val current                            = (unconfirmed, updatedMdConstraint.constraints.head)
+    unconfirmed match {
+      case None =>
+        log.trace("UTX is empty, retrying")
+        Task.now(Retry)
 
-              if (unconfirmed.isEmpty) current
-              else if (updatedMdConstraint.isFull || (unconfirmed.exists(_.nonEmpty) && elapsed >= settings.microBlockInterval)) {
-                val lastTxs    = prev._1.fold(0)(_.length)
-                val currentTxs = current._1.fold(0)(_.length)
-                if (lastTxs > currentTxs) prev else current
-              } else {
-                Thread.sleep(100)
-                pack(current)
-              }
-            }
-          }
+      case Some(unconfirmed) if unconfirmed.nonEmpty =>
+        log.trace(s"Generating microBlock for $account, constraints: $updatedTotalConstraint")
 
-          pack()
+        for {
+          blocks <- forgeBlocks(account, accumulatedBlock, unconfirmed)
+            .leftWiden[Throwable]
+            .liftTo[Task]
+          (signedBlock, microBlock) = blocks
+          blockId <- appendMicroBlock(microBlock)
+          _       <- broadcastMicroBlock(account, microBlock, blockId)
+        } yield {
+          if (updatedTotalConstraint.isFull) Stop
+          else Success(signedBlock, updatedTotalConstraint)
         }
-
-        maybeUnconfirmed match {
-          case None =>
-            log.trace("UTX is empty, retrying")
-            Task.now(Retry)
-
-          case Some(unconfirmed) if unconfirmed.nonEmpty =>
-            log.trace(s"Generating microBlock for $account, constraints: $updatedTotalConstraint")
-
-            for {
-              blocks <- forgeBlocks(account, accumulatedBlock, unconfirmed)
-                .leftWiden[Throwable]
-                .liftTo[Task]
-              (signedBlock, microBlock) = blocks
-              blockId <- appendMicroBlock(microBlock)
-              _       <- broadcastMicroBlock(account, microBlock, blockId)
-            } yield {
-              if (updatedTotalConstraint.isFull) Stop
-              else Success(signedBlock, updatedTotalConstraint)
-            }
-          case _ =>
-            if (updatedTotalConstraint.isFull) {
-              log.trace(s"Stopping forging microBlocks, the block is full: $updatedTotalConstraint")
-              Task.now(Stop)
-            } else {
-              log.trace("All transactions are too big")
-              Task.now(Retry)
-            }
+      case _ =>
+        if (updatedTotalConstraint.isFull) {
+          log.trace(s"Stopping forging microBlocks, the block is full: $updatedTotalConstraint")
+          Task.now(Stop)
+        } else {
+          log.trace("All transactions are too big")
+          Task.now(Retry)
         }
-      }
+    }
+  }
 
   private def broadcastMicroBlock(account: KeyPair, microBlock: MicroBlock, blockId: BlockId): Task[Unit] =
     Task(allChannels.broadcast(MicroBlockInv(account, blockId, microBlock.reference)))
