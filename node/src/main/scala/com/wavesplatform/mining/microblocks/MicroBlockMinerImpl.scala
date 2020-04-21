@@ -49,7 +49,7 @@ class MicroBlockMinerImpl(
         case Success(newBlock, newConstraint) =>
           generateMicroBlockSequence(account, newBlock, constraints, newConstraint)
         case Retry =>
-          Task.sleep(settings.microBlockInterval).flatMap(_ => generateMicroBlockSequence(account, accumulatedBlock, constraints, restTotalConstraint))
+          Task.sleep(100 millis).flatMap(_ => generateMicroBlockSequence(account, accumulatedBlock, constraints, restTotalConstraint))
         case Stop =>
           debugState
             .set(MinerDebugInfo.MiningBlocks) >>

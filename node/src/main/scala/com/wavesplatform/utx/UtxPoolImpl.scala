@@ -348,7 +348,7 @@ class UtxPoolImpl(
 
       @tailrec
       def loop(seed: PackResult): PackResult = {
-        if (isTimeLimitReached && seed.transactions.exists(_.nonEmpty) || (transactions.isEmpty && priorityTransactions.isEmpty)) seed
+        if (isTimeLimitReached && (seed.transactions.exists(_.nonEmpty) || (transactions.isEmpty && priorityTransactions.isEmpty))) seed
         else {
           val newSeed = packIteration(
             seed.copy(checkedAddresses = Set.empty),
@@ -358,12 +358,12 @@ class UtxPoolImpl(
             log.trace(s"Block is full: ${newSeed.constraint}")
             newSeed
           } else {
-            val allValidated = transactions.keys().asScala.forall(newSeed.validatedTransactions)
+            def allValidated = (transactions.keys().asScala ++ priorityTransactions.keysIterator).forall(newSeed.validatedTransactions)
             if (isEstimateReached && allValidated) {
               log.trace("No more transactions to validate")
               newSeed
             } else {
-              if (allValidated) Thread.sleep(200)
+              while (allValidated && !isEstimateReached) Thread.sleep(200)
               loop(newSeed)
             }
           }
