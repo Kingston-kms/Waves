@@ -36,8 +36,9 @@ trait FailedTransactionSuiteLike[T] extends ScorexLogging { _: Matchers =>
       checker: (Seq[T], T) => Seq[S]
   ): Seq[S] = {
     val maxTxsInMicroBlock = sender.config.getInt("waves.miner.max-transactions-in-micro-block")
-    val txs                = (1 to maxTxsInMicroBlock * 2).map(i => t(i))
     val priorityTx         = pt()
+    waitForEmptyUtx()
+    val txs                = (1 to maxTxsInMicroBlock * 2).map(i => t(i))
     waitForEmptyUtx()
 
     checker(txs, priorityTx) // liquid
