@@ -643,6 +643,16 @@ class UtxPoolSpecification
             val (tx, _) = utxPool.packUnconfirmed(MultiDimensionalMiningConstraint.unlimited, 100.nanos, Duration.Zero)
             tx.get should contain(transfer)
         }
+
+        "retries until estimate" in withDomain() { d =>
+          val settings =
+            UtxSettings(10, PoolDefaultMaxBytes, 1000, Set.empty, Set.empty, allowTransactionsFromSmartAccounts = true, allowSkipChecks = false)
+          val utxPool = new UtxPoolImpl(ntpTime, d.blockchainUpdater, ignoreSpendableBalanceChanged, settings, true)
+          val startTime = System.nanoTime()
+          val (result, _) = utxPool.packUnconfirmed(MultiDimensionalMiningConstraint.unlimited, 10 seconds, 3 seconds)
+          result shouldBe None
+          (System.nanoTime() - startTime).nanos.toMillis shouldBe 3000L +- 1000
+        }
       }
     }
 

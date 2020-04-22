@@ -277,7 +277,7 @@ class UtxPoolImpl(
     val packResult = PoolMetrics.packTimeStats.measure {
       val startTime                   = nanoTimeSource()
       def isTimeLimitReached: Boolean = maxPackTime.isFinite() && (nanoTimeSource() - startTime) >= maxPackTime.toNanos
-      def isEstimateReached: Boolean  = (nanoTimeSource() - startTime) > estimate.toNanos
+      def isEstimateReached: Boolean  = (nanoTimeSource() - startTime) >= estimate.toNanos
 
       def packIteration(prevResult: PackResult, sortedTransactions: Iterator[TxEntry]): PackResult =
         sortedTransactions
@@ -348,8 +348,12 @@ class UtxPoolImpl(
 
       @tailrec
       def loop(seed: PackResult): PackResult = {
-        if (isTimeLimitReached && (seed.transactions.exists(_.nonEmpty) || (transactions.isEmpty && priorityTransactions.isEmpty))) seed
-        else {
+        def allValidated(seed: PackResult) = (transactions.keys().asScala ++ priorityTransactions.keysIterator).forall(seed.validatedTransactions)
+
+        if (isTimeLimitReached && (seed.transactions.exists(_.nonEmpty) || allValidated(seed))) {
+          log.trace("Time limit reached")
+          seed
+        } else {
           val newSeed = packIteration(
             seed.copy(checkedAddresses = Set.empty),
             this.createTxEntrySeq().iterator
@@ -358,12 +362,11 @@ class UtxPoolImpl(
             log.trace(s"Block is full: ${newSeed.constraint}")
             newSeed
           } else {
-            def allValidated = (transactions.keys().asScala ++ priorityTransactions.keysIterator).forall(newSeed.validatedTransactions)
-            if (isEstimateReached && allValidated) {
+            if (isEstimateReached && allValidated(newSeed)) {
               log.trace("No more transactions to validate")
               newSeed
             } else {
-              while (allValidated && !isEstimateReached) Thread.sleep(200)
+              while (!isEstimateReached && allValidated(newSeed)) Thread.sleep(200)
               loop(newSeed)
             }
           }
