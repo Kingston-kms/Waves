@@ -34,11 +34,13 @@ class RebroadcastTransactionSuite extends BaseTransactionSuite with NodesFromDoc
     nodeA.waitForPeers(1)
 
     nodeB.ensureTxDoesntExist(txId)
+    nodeA.putData(nodeA.privateKey.stringRepr, Nil, minFee)
+    Thread.sleep(400)
     nodeA.signedBroadcast(tx)
     nodeB.waitForUtxIncreased(0)
     nodeB.utxSize shouldBe 1
-
   }
+
   test("should not rebroadcast a transaction if that's not allowed in config") {
     dockerNodes().foreach(docker.restartNode(_, configWithRebroadcastNotAllowed))
     val tx = TransferTransaction

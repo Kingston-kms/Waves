@@ -104,13 +104,11 @@ class AcceptFailedScriptActivationSuite extends BaseTransactionSuite with NTPTim
     sender.waitForHeight(ActivationHeight)
 
     sender.setAssetScript(asset, dApp, setAssetScriptFee + smartFee, assetScript(true), waitForTx = true)
-
+    sender.setAssetScript(asset, dApp, priorityFee, assetScript(false), waitForTx = true)
     val txs =
       (1 to MaxTxsInMicroBlock * 2).map { _ =>
         sender.invokeScript(caller, dApp, Some("transfer"), fee = minInvokeFee)._1.id
       }
-
-    sender.setAssetScript(asset, dApp, priorityFee, assetScript(false), waitForTx = true)
 
     sender.waitFor("empty utx")(n => n.utxSize, (utxSize: Int) => utxSize == 0, 100.millis)
 
