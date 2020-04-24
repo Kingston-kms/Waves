@@ -64,22 +64,29 @@ class MicroBlockMinerImpl(
       constraints: MiningConstraints,
       restTotalConstraint: MiningConstraint
   ): Task[MicroBlockMiningResult] = {
-    val packTask = Task.eval {
-      val mdConstraint = MultiDimensionalMiningConstraint(restTotalConstraint, constraints.micro)
-      val packStrategy =
-        if (accumulatedBlock.transactionData.isEmpty) PackStrategy.Limit(settings.microBlockInterval)
-        else PackStrategy.Estimate(settings.microBlockInterval)
-      log.trace(s"Starting microblock pack for ${accumulatedBlock.id()} with $packStrategy")
-      val (unconfirmed, updatedMdConstraint) =
-        concurrent.blocking(
-          Instrumented.logMeasure(log, "packing unconfirmed transactions for microblock")(
-            utx.packUnconfirmed(
-              mdConstraint,
-              packStrategy
-            )
-          )
-        )
-      (unconfirmed, updatedMdConstraint.constraints.head)
+    val packTask = Task.cancelable[(Option[Seq[Transaction]], MiningConstraint)] { cb =>
+        @volatile var cancelled = false
+        minerScheduler.execute { () =>
+          val mdConstraint = MultiDimensionalMiningConstraint(restTotalConstraint, constraints.micro)
+          val packStrategy =
+            if (accumulatedBlock.transactionData.isEmpty) PackStrategy.Limit(settings.microBlockInterval)
+            else PackStrategy.Estimate(settings.microBlockInterval)
+          log.info(s"Starting pack for ${accumulatedBlock.id()} with $packStrategy")
+          val (unconfirmed, updatedMdConstraint) =
+            concurrent.blocking(Instrumented.logMeasure(log, "packing unconfirmed transactions for microblock")(
+              utx.packUnconfirmed(
+                mdConstraint,
+                packStrategy,
+                () => cancelled
+              )
+            ))
+          log.info("Finished pack")
+          val updatedTotalConstraint = updatedMdConstraint.constraints.head
+          cb.onSuccess(unconfirmed -> updatedTotalConstraint)
+        }
+        Task.eval {
+          cancelled = true
+        }
     }
 
     packTask.executeOn(minerScheduler).flatMap {

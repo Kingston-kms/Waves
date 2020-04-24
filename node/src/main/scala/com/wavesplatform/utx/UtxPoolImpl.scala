@@ -39,6 +39,7 @@ import org.slf4j.LoggerFactory
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.concurrent.duration.{Duration => ScalaDuration}
 import scala.util.{Left, Right}
 
 class UtxPoolImpl(
@@ -255,20 +256,23 @@ class UtxPoolImpl(
 
   override def packUnconfirmed(
       initialConstraint: MultiDimensionalMiningConstraint,
-      strategy: PackStrategy
+      strategy: PackStrategy,
+      cancelled: () => Boolean
   ): (Option[Seq[Transaction]], MultiDimensionalMiningConstraint) = {
-    pack(TransactionDiffer(blockchain.lastBlockTimestamp, time.correctedTime()))(initialConstraint, strategy)
+    pack(TransactionDiffer(blockchain.lastBlockTimestamp, time.correctedTime()))(initialConstraint, strategy, cancelled)
   }
 
   private def cleanUnconfirmed(): Unit =
     pack(TransactionDiffer.skipFailing(blockchain.lastBlockTimestamp, time.correctedTime()))(
       MultiDimensionalMiningConstraint.unlimited,
-      PackStrategy.Unlimited
+      PackStrategy.Unlimited,
+      () => false
     )
 
   private def pack(differ: (Blockchain, Transaction) => TracedResult[ValidationError, Diff])(
       initialConstraint: MultiDimensionalMiningConstraint,
-      strategy: PackStrategy
+      strategy: PackStrategy,
+      cancelled: () => Boolean
   ): (Option[Seq[Transaction]], MultiDimensionalMiningConstraint) = {
 
     val packResult = PoolMetrics.packTimeStats.measure {
@@ -293,7 +297,7 @@ class UtxPoolImpl(
               def isLimitReached   = r.transactions.exists(_.nonEmpty) && isTimeLimitReached
               def isAlreadyRemoved = !priority && !transactions.containsKey(tx.id())
 
-              if (r.constraint.isFull || isLimitReached || isAlreadyRemoved)
+              if (r.constraint.isFull || isLimitReached || isAlreadyRemoved || cancelled())
                 r // don't run any checks here to speed up mining
               else if (TxCheck.isExpired(tx)) {
                 log.debug(s"Transaction ${tx.id()} expired")
@@ -369,8 +373,8 @@ class UtxPoolImpl(
             newSeed
           } else {
             val continue = try {
-              while (!isTimeEstimateReached && allValidated(newSeed)) Thread.sleep(200)
-              true
+              while (!cancelled() && !isTimeEstimateReached && allValidated(newSeed)) Thread.sleep(200)
+              !cancelled()
             } catch {
               case _: InterruptedException =>
                 false

@@ -21,7 +21,8 @@ trait UtxPool extends AutoCloseable {
   def transactionById(transactionId: ByteStr): Option[Transaction]
   def packUnconfirmed(
       rest: MultiDimensionalMiningConstraint,
-      strategy: PackStrategy = PackStrategy.Unlimited
+      strategy: PackStrategy = PackStrategy.Unlimited,
+      cancelled: () => Boolean = () => false
   ): (Option[Seq[Transaction]], MultiDimensionalMiningConstraint)
 }
 
