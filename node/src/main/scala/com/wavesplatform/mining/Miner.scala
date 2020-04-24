@@ -56,7 +56,6 @@ class MinerImpl(
     wallet: Wallet,
     pos: PoSSelector,
     val minerScheduler: SchedulerService,
-    val microMinerScheduler: SchedulerService,
     val appenderScheduler: SchedulerService
 ) extends Miner
     with MinerDebugInfo
@@ -79,7 +78,7 @@ class MinerImpl(
     blockchainUpdater,
     utx,
     settings.minerSettings,
-    microMinerScheduler,
+    minerScheduler,
     appenderScheduler
   )
 
