@@ -369,8 +369,15 @@ class UtxPoolImpl(
             log.trace("No more transactions to validate")
             newSeed
           } else {
-            while (!isTimeEstimateReached && allValidated(newSeed)) Thread.sleep(200)
-            loop(newSeed)
+            val continue = try {
+              while (!isTimeEstimateReached && allValidated(newSeed)) Thread.sleep(200)
+              true
+            } catch {
+              case _: InterruptedException =>
+                false
+            }
+            if (continue) loop(newSeed)
+            else newSeed
           }
         }
       }

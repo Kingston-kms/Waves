@@ -44,8 +44,7 @@ class MicroBlockMinerImpl(
       constraints: MiningConstraints,
       restTotalConstraint: MiningConstraint
   ): Task[Unit] = {
-    Task(generateOneMicroBlockTask(account, accumulatedBlock, constraints, restTotalConstraint)).flatten
-      .asyncBoundary(minerScheduler)
+    generateOneMicroBlockTask(account, accumulatedBlock, constraints, restTotalConstraint)
       .flatMap {
         case Success(newBlock, newConstraint) =>
           generateMicroBlockSequence(account, newBlock, constraints, newConstraint)
@@ -101,7 +100,7 @@ class MicroBlockMinerImpl(
           Task.now(Retry)
         }
     }
-  }
+  }.executeOn(minerScheduler)
 
   private def broadcastMicroBlock(account: KeyPair, microBlock: MicroBlock, blockId: BlockId): Task[Unit] =
     Task(if (allChannels != null) allChannels.broadcast(MicroBlockInv(account, blockId, microBlock.reference)))
