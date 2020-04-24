@@ -47,7 +47,7 @@ class MicroBlockMinerImpl(
     generateOneMicroBlockTask(account, accumulatedBlock, constraints, restTotalConstraint)
       .flatMap {
         case Success(newBlock, newConstraint) =>
-          generateMicroBlockSequence(account, newBlock, constraints, newConstraint)
+          Task.defer(generateMicroBlockSequence(account, newBlock, constraints, newConstraint))
         case Retry =>
           Task.sleep(200 millis).flatMap(_ => generateMicroBlockSequence(account, accumulatedBlock, constraints, restTotalConstraint))
         case Stop =>
@@ -63,22 +63,34 @@ class MicroBlockMinerImpl(
       accumulatedBlock: Block,
       constraints: MiningConstraints,
       restTotalConstraint: MiningConstraint
-  ): Task[MicroBlockMiningResult] = Task.defer {
-    val mdConstraint = MultiDimensionalMiningConstraint(restTotalConstraint, constraints.micro)
-    log.info("Starting pack")
-    val (unconfirmed, updatedMdConstraint) =
-      Instrumented.logMeasure(log, "packing unconfirmed transactions for microblock")(
-        utx.packUnconfirmed(
-          mdConstraint,
-          if (accumulatedBlock.transactionData.isEmpty) PackStrategy.Limit(settings.microBlockInterval)
-          else PackStrategy.Estimate(settings.microBlockInterval)
-        )
-      )
-    log.info("Finished pack")
-    val updatedTotalConstraint = updatedMdConstraint.constraints.head
+  ): Task[MicroBlockMiningResult] = {
+    val packTask = Task.cancelable[(Option[Seq[Transaction]], MiningConstraint)] { cb =>
+        @volatile var cancelled = false
+        minerScheduler.execute { () =>
+          val mdConstraint = MultiDimensionalMiningConstraint(restTotalConstraint, constraints.micro)
+          val packStrategy =
+            if (accumulatedBlock.transactionData.isEmpty) PackStrategy.Limit(settings.microBlockInterval)
+            else PackStrategy.Estimate(settings.microBlockInterval)
+          log.info(s"Starting pack for ${accumulatedBlock.id()} with $packStrategy")
+          val (unconfirmed, updatedMdConstraint) =
+            concurrent.blocking(Instrumented.logMeasure(log, "packing unconfirmed transactions for microblock")(
+              utx.packUnconfirmed(
+                mdConstraint,
+                packStrategy,
+                () => cancelled
+              )
+            ))
+          log.info("Finished pack")
+          val updatedTotalConstraint = updatedMdConstraint.constraints.head
+          cb.onSuccess(unconfirmed -> updatedTotalConstraint)
+        }
+        Task.eval {
+          cancelled = true
+        }
+    }
 
-    unconfirmed match {
-      case Some(unconfirmed) if unconfirmed.nonEmpty =>
+    packTask.executeOn(minerScheduler).flatMap {
+      case (Some(unconfirmed), updatedTotalConstraint) if unconfirmed.nonEmpty =>
         log.trace(s"Generating microBlock for $account, constraints: $updatedTotalConstraint")
 
         for {
@@ -93,7 +105,7 @@ class MicroBlockMinerImpl(
           else Success(signedBlock, updatedTotalConstraint)
         }
 
-      case _ =>
+      case (_, updatedTotalConstraint) =>
         if (updatedTotalConstraint.isFull) {
           log.trace(s"Stopping forging microBlocks, the block is full: $updatedTotalConstraint")
           Task.now(Stop)
@@ -102,7 +114,7 @@ class MicroBlockMinerImpl(
           Task.now(Retry)
         }
     }
-  }.executeOn(minerScheduler)
+  }
 
   private def broadcastMicroBlock(account: KeyPair, microBlock: MicroBlock, blockId: BlockId): Task[Unit] =
     Task(if (allChannels != null) allChannels.broadcast(MicroBlockInv(account, blockId, microBlock.reference)))
