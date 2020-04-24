@@ -65,6 +65,7 @@ class MicroBlockMinerImpl(
       restTotalConstraint: MiningConstraint
   ): Task[MicroBlockMiningResult] = Task.defer {
     val mdConstraint = MultiDimensionalMiningConstraint(restTotalConstraint, constraints.micro)
+    log.info("Starting pack")
     val (unconfirmed, updatedMdConstraint) =
       Instrumented.logMeasure(log, "packing unconfirmed transactions for microblock")(
         utx.packUnconfirmed(
@@ -73,6 +74,7 @@ class MicroBlockMinerImpl(
           else PackStrategy.Estimate(settings.microBlockInterval)
         )
       )
+    log.info("Finished pack")
     val updatedTotalConstraint = updatedMdConstraint.constraints.head
 
     unconfirmed match {
