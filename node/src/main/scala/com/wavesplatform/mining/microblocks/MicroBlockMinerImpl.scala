@@ -77,10 +77,6 @@ class MicroBlockMinerImpl(
     val updatedTotalConstraint = updatedMdConstraint.constraints.head
 
     unconfirmed match {
-      case None =>
-        log.trace("UTX is empty, retrying")
-        Task.now(Retry)
-
       case Some(unconfirmed) if unconfirmed.nonEmpty =>
         log.trace(s"Generating microBlock for $account, constraints: $updatedTotalConstraint")
 
@@ -95,12 +91,13 @@ class MicroBlockMinerImpl(
           if (updatedTotalConstraint.isFull) Stop
           else Success(signedBlock, updatedTotalConstraint)
         }
+
       case _ =>
         if (updatedTotalConstraint.isFull) {
           log.trace(s"Stopping forging microBlocks, the block is full: $updatedTotalConstraint")
           Task.now(Stop)
         } else {
-          log.trace("All transactions are too big")
+          log.trace("UTX is empty, retrying")
           Task.now(Retry)
         }
     }
