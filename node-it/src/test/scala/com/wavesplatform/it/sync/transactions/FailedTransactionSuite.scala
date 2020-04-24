@@ -23,7 +23,7 @@ import org.scalatest.CancelAfterFailure
 import scala.concurrent.duration._
 import scala.util.Try
 
-class FailedTransactionSuite extends BaseTransactionSuite with CancelAfterFailure with FailedTransactionSuiteLike[String] {
+class FailedTransactionSuite extends BaseTransactionSuite with CancelAfterFailure with FailedTransactionSuiteLike[String] with OverflowBlock {
   import FailedTransactionSuite._
   import FailedTransactionSuiteLike._
   import restApi._
@@ -565,17 +565,6 @@ class FailedTransactionSuite extends BaseTransactionSuite with CancelAfterFailur
     waitForEmptyUtx()
 
     assertFailedTxs(txs)
-  }
-
-  def overflowBlock(): Unit = {
-    val entries = List.tabulate(4)(n => BinaryDataEntry("test" + n, ByteStr(Array.fill(32767)(n.toByte))))
-    val addr = sender.createAddress()
-    val fee = calcDataFee(entries, 1)
-    waitForHeightArise()
-    sender.transfer(sender.privateKey.stringRepr, addr, fee * 10)
-    waitForEmptyUtx()
-    for (_ <- 1 to 7) sender.putData(addr, entries, fee)
-    waitForEmptyUtx()
   }
 
   def updateTikTok(result: String, fee: Long): String =
