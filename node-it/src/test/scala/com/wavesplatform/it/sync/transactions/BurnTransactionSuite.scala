@@ -14,7 +14,8 @@ class BurnTransactionSuite extends BaseTransactionSuite {
   test("burning assets changes issuer's asset balance; issuer's waves balance is decreased by fee") {
     for (v <- burnTxSupportedVersions) {
       val (balance, effectiveBalance) = miner.accountBalances(firstAddress)
-      val issuedAssetId               = sender.issue(firstAddress, s"name+$v", "description", issueAmount, decimals, reissuable = false, fee = issueFee, waitForTx = true).id
+      val issuedAssetId =
+        sender.issue(firstAddress, s"name+$v", "description", issueAmount, decimals, reissuable = false, fee = issueFee, waitForTx = true).id
 
       miner.assertBalances(firstAddress, balance - issueFee, effectiveBalance - issueFee)
       miner.assertAssetBalance(firstAddress, issuedAssetId, issueAmount)
@@ -62,12 +63,12 @@ class BurnTransactionSuite extends BaseTransactionSuite {
         sender.issue(firstAddress, s"name+$v", "description", issuedQuantity, decimals, reissuable = false, issueFee, waitForTx = true).id
 
       sender.assertAssetBalance(firstAddress, issuedAssetId, issuedQuantity)
-      val transferId = sender.transfer(firstAddress, secondAddress, transferredQuantity, minFee, issuedAssetId.some, waitForTx = true).id
+      sender.transfer(firstAddress, secondAddress, transferredQuantity, minFee, issuedAssetId.some, waitForTx = true).id
 
       sender.assertAssetBalance(firstAddress, issuedAssetId, issuedQuantity - transferredQuantity)
       sender.assertAssetBalance(secondAddress, issuedAssetId, transferredQuantity)
 
-      val burnId = sender.burn(secondAddress, issuedAssetId, transferredQuantity, minFee, v, waitForTx = true).id
+      sender.burn(secondAddress, issuedAssetId, transferredQuantity, minFee, v, waitForTx = true).id
       sender.assertAssetBalance(secondAddress, issuedAssetId, 0)
 
       val details = miner.assetsDetails(issuedAssetId)
