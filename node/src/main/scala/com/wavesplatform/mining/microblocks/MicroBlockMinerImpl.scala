@@ -71,7 +71,7 @@ class MicroBlockMinerImpl(
           val packStrategy =
             if (accumulatedBlock.transactionData.isEmpty) PackStrategy.Limit(settings.microBlockInterval)
             else PackStrategy.Estimate(settings.microBlockInterval)
-          log.info(s"Starting pack for ${accumulatedBlock.id()} with $packStrategy")
+          log.info(s"Starting pack for ${accumulatedBlock.id()} with $packStrategy, initial constraint is $mdConstraint")
           val (unconfirmed, updatedMdConstraint) =
             concurrent.blocking(Instrumented.logMeasure(log, "packing unconfirmed transactions for microblock")(
               utx.packUnconfirmed(

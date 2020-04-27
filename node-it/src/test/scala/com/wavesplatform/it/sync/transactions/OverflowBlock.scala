@@ -1,13 +1,14 @@
 package com.wavesplatform.it.sync.transactions
 
 import com.wavesplatform.common.state.ByteStr
+import com.wavesplatform.it.IntegrationSuiteWithThreeAddresses
 import com.wavesplatform.it.sync.calcDataFee
 import com.wavesplatform.it.transactions.BaseTransactionSuite
 import com.wavesplatform.state.BinaryDataEntry
 
 import scala.concurrent.duration._
 
-trait OverflowBlock { self: BaseTransactionSuite =>
+trait OverflowBlock { self: IntegrationSuiteWithThreeAddresses =>
 
   // Hack to bypass instant micro mining
   def overflowBlock(): Unit = {

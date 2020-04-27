@@ -39,7 +39,6 @@ import org.slf4j.LoggerFactory
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.concurrent.duration.{Duration => ScalaDuration}
 import scala.util.{Left, Right}
 
 class UtxPoolImpl(
@@ -374,14 +373,14 @@ class UtxPoolImpl(
           } else {
             val continue = try {
               while (!cancelled() && !isTimeEstimateReached && allValidated(newSeed)) Thread.sleep(200)
-              !cancelled()
+              !cancelled() && !isTimeEstimateReached
             } catch {
               case _: InterruptedException =>
                 false
             }
             if (continue) loop(newSeed)
             else {
-              log.trace("Pack cancelled")
+              if (cancelled()) log.trace("Pack cancelled")
               newSeed
             }
           }
