@@ -563,6 +563,7 @@ class FailedTransactionSuite extends BaseTransactionSuite with CancelAfterFailur
       n.height
     }, (h: Int) => h % 2 != 0, 1 second)
 
+    miner.waitFor("empty utx")(_.utxSize, (_: Int) == 0, 1 second)
     assertFailedTxs(txs)
   }
 
