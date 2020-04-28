@@ -45,7 +45,7 @@ class FailedTransactionGrpcSuite extends GrpcBaseTransactionSuite with FailedTra
   protected override def beforeAll(): Unit = {
     super.beforeAll()
 
-    sender.broadcastTransfer(sender.privateKey, Recipient().withPublicKeyHash(contractAddr), 100.waves, minFee, waitForTx = true)
+    sender.broadcastTransfer(sender.keyPair, Recipient().withPublicKeyHash(contractAddr), 100.waves, minFee, waitForTx = true)
 
     smartAsset = PBTransactions
       .vanillaUnsafe(
@@ -511,7 +511,7 @@ class FailedTransactionGrpcSuite extends GrpcBaseTransactionSuite with FailedTra
     val entries = List.tabulate(4)(n => PBTransactions.toPBDataEntry(BinaryDataEntry("test" + n, ByteStr(Array.fill(32767)(n.toByte)))))
     val fee = calcDataFee(entries)
     waitForHeightArise()
-    for (_ <- 1 to 8) sender.putData(sender.privateKey, entries, fee)
+    for (_ <- 1 to 8) sender.putData(sender.keyPair, entries, fee)
     waitForEmptyUtx()
   }
 
