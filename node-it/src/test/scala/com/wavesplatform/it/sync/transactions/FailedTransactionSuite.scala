@@ -561,7 +561,7 @@ class FailedTransactionSuite extends BaseTransactionSuite with CancelAfterFailur
     sender.waitFor("send until odd height")({ n =>
       Try(n.invokeScript(caller, contract, Some("blockIsEven"), fee = invokeFee)._1.id).foreach(txs += _)
       n.height
-    }, (h: Int) => h % 2 != 0, 10.millis)
+    }, (h: Int) => h % 2 != 0, 1 second)
     waitForEmptyUtx()
 
     assertFailedTxs(txs)
