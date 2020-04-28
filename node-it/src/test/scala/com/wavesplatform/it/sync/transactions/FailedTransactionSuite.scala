@@ -562,7 +562,6 @@ class FailedTransactionSuite extends BaseTransactionSuite with CancelAfterFailur
       Try(n.invokeScript(caller, contract, Some("blockIsEven"), fee = invokeFee)._1.id).foreach(txs += _)
       n.height
     }, (h: Int) => h % 2 != 0, 1 second)
-    waitForEmptyUtx()
 
     assertFailedTxs(txs)
   }
@@ -571,8 +570,7 @@ class FailedTransactionSuite extends BaseTransactionSuite with CancelAfterFailur
     sender.broadcastData(pkByAddress(contract), List(StringDataEntry("tikTok", result)), fee = fee, waitForTx = true).id
 
   private def waitForTxs(txs: Seq[String]): Unit =
-    nodes.waitFor[Boolean]("preconditions")(100.millis)(
-      n => n.transactionStatus(txs).forall(_.status == "confirmed"),
+    nodes.waitFor("preconditions", 100.millis)(_.transactionStatus(txs).forall(_.status == "confirmed"))(
       statuses => statuses.forall(identity)
     )
 

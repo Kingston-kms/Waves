@@ -294,7 +294,7 @@ class IssueReissueBurnAssetSuite extends BaseSuite {
       invokeScript(acc, "reissueIssueAndNft", assetId = asset, fee = invocationCost(1))
       burn(acc, CallableMethod, asset, 5000)
       burn(acc, TransactionMethod, asset, 10000)
-      nodes.waitFor("empty utx")(1 second)(_.utxSize, _.forall(_ == 0))
+      nodes.waitFor("empty utx")(_.utxSize)(_.forall(_ == 0))
       nodes.waitForHeightArise()
 
       nodes.rollback(height, returnToUTX = false)
