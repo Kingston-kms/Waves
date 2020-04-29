@@ -559,7 +559,7 @@ class FailedTransactionSuite extends BaseTransactionSuite with CancelAfterFailur
     val txs = collection.mutable.ListBuffer[String]()
     sender.waitFor("wait for even height")(n => n.height, (h: Int) => h % 2 == 0, 100.millis)
     sender.waitFor("send until odd height")({ n =>
-      Try(n.invokeScript(caller, contract, Some("blockIsEven"), fee = invokeFee)._1.id).foreach(txs += _)
+      Try(n.invokeScript(caller, contract, Some("blockIsEven"), fee = invokeFee, waitForTx = true)._1.id).foreach(txs += _)
       n.height
     }, (h: Int) => h % 2 != 0, 1 second)
 
