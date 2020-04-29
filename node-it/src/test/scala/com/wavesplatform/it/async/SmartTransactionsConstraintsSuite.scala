@@ -13,7 +13,6 @@ import com.wavesplatform.lang.v1.compiler.Terms
 import com.wavesplatform.mining.MiningConstraints.MaxScriptRunsInBlock
 import com.wavesplatform.transaction.TxVersion
 import com.wavesplatform.transaction.smart.SetScriptTransaction
-import org.checkerframework.checker.units.qual.h
 import org.scalatest._
 import play.api.libs.json.{JsNumber, Json}
 
