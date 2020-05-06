@@ -5,10 +5,10 @@ import com.typesafe.config.Config
 import com.wavesplatform.block.Block
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.crypto
-import com.wavesplatform.it.{GrpcIntegrationSuiteWithThreeAddress, NodeConfigs, ReportingTestName}
-import com.wavesplatform.it.sync.activation.ActivationStatusRequest
 import com.wavesplatform.it.api.SyncGrpcApi._
+import com.wavesplatform.it.sync.activation.ActivationStatusRequest
 import com.wavesplatform.it.transactions.NodesFromDocker
+import com.wavesplatform.it.{GrpcIntegrationSuiteWithThreeAddress, NodeConfigs, ReportingTestName}
 import org.scalatest.{CancelAfterFailure, FreeSpec, Matchers, OptionValues}
 
 import scala.concurrent.duration._
@@ -35,7 +35,7 @@ class BlockV5GrpcSuite
       sender.waitForHeight(sender.height + 1, 2.minutes)
       val currentHeight = sender.height
 
-      val blockV5 = sender.blockAt(currentHeight)
+      val blockV5     = sender.blockAt(currentHeight)
       val blockV5ById = sender.blockById(ByteString.copyFrom(blockV5.id().arr))
 
       blockV5.header.version shouldBe Block.ProtoBlockVersion
@@ -49,7 +49,7 @@ class BlockV5GrpcSuite
 
       sender.waitForHeight(currentHeight + 1, 2.minutes)
 
-      val blockAfterVRFUsing = sender.blockAt(currentHeight + 1)
+      val blockAfterVRFUsing     = sender.blockAt(currentHeight + 1)
       val blockAfterVRFUsingById = sender.blockById(ByteString.copyFrom(blockAfterVRFUsing.id().arr))
 
       blockAfterVRFUsing.header.version shouldBe Block.ProtoBlockVersion
