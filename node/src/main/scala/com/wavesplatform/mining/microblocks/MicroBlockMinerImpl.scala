@@ -41,15 +41,16 @@ class MicroBlockMinerImpl(
       account: KeyPair,
       accumulatedBlock: Block,
       constraints: MiningConstraints,
-      restTotalConstraint: MiningConstraint
+      restTotalConstraint: MiningConstraint,
+      lastMicroBlock: Long
   ): Task[Unit] = {
-    generateOneMicroBlockTask(account, accumulatedBlock, constraints, restTotalConstraint)
+    generateOneMicroBlockTask(account, accumulatedBlock, constraints, restTotalConstraint, lastMicroBlock)
       .flatMap {
         case Success(newBlock, newConstraint) =>
-          Task.defer(generateMicroBlockSequence(account, newBlock, constraints, newConstraint))
+          Task.defer(generateMicroBlockSequence(account, newBlock, constraints, newConstraint, System.nanoTime()))
         case Retry =>
           Task
-            .defer(generateMicroBlockSequence(account, accumulatedBlock, constraints, restTotalConstraint))
+            .defer(generateMicroBlockSequence(account, accumulatedBlock, constraints, restTotalConstraint, lastMicroBlock))
             .delayExecution(1 second)
         case Stop =>
           debugState
@@ -63,8 +64,9 @@ class MicroBlockMinerImpl(
       account: KeyPair,
       accumulatedBlock: Block,
       constraints: MiningConstraints,
-      restTotalConstraint: MiningConstraint
-  ): Task[MicroBlockMiningResult] = {
+      restTotalConstraint: MiningConstraint,
+      lastMicroBlock: Long
+  ) = {
     val packTask = Task.cancelable[(Option[Seq[Transaction]], MiningConstraint)] { cb =>
       @volatile var cancelled = false
       minerScheduler.execute { () =>
@@ -95,9 +97,15 @@ class MicroBlockMinerImpl(
 
     packTask.flatMap {
       case (Some(unconfirmed), updatedTotalConstraint) if unconfirmed.nonEmpty =>
-        log.trace(s"Generating microBlock for $account, constraints: $updatedTotalConstraint")
+        val delay = {
+          val now          = System.nanoTime()
+          val nextSendTime = lastMicroBlock + settings.microBlockInterval.toNanos
+          if (now >= nextSendTime) Duration.Zero else (nextSendTime - now).nanos
+        }
 
         for {
+          _ <- Task.sleep(delay)
+          _ = log.trace(s"Generating microBlock for $account, constraints: $updatedTotalConstraint")
           blocks <- forgeBlocks(account, accumulatedBlock, unconfirmed)
             .leftWiden[Throwable]
             .liftTo[Task]

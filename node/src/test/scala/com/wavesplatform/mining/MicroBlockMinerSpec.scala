@@ -44,13 +44,15 @@ class MicroBlockMinerSpec extends FlatSpec with Matchers with PrivateMethodTeste
 
       def generateBlocks(
           block: Block,
-          constraint: MiningConstraint
+          constraint: MiningConstraint,
+          lastMicroBlock: Long
       ): Block = {
         val task = microBlockMiner invokePrivate generateOneMicroBlockTask(
           acc,
           block,
           MiningConstraints(d.blockchainUpdater, d.blockchainUpdater.height, Some(settings.minerSettings)),
-          constraint
+          constraint,
+          lastMicroBlock
         )
         import Scheduler.Implicits.global
         val startTime = System.nanoTime()
@@ -67,7 +69,7 @@ class MicroBlockMinerSpec extends FlatSpec with Matchers with PrivateMethodTeste
             if (isFirstBlock) elapsed should be < 1000L
             else elapsed shouldBe settings.minerSettings.microBlockInterval.toMillis +- 1000
 
-            generateBlocks(b, totalConstraint)
+            generateBlocks(b, totalConstraint, System.nanoTime())
           case MicroBlockMinerImpl.Stop =>
             d.blockchainUpdater.liquidBlock(d.blockchainUpdater.lastBlockId.get).get
           case MicroBlockMinerImpl.Retry =>
@@ -92,7 +94,7 @@ class MicroBlockMinerSpec extends FlatSpec with Matchers with PrivateMethodTeste
       d.appendBlock(baseBlock)
 
       val constraint = OneDimensionalMiningConstraint(5, TxEstimators.one, "limit")
-      val lastBlock = generateBlocks(baseBlock, constraint)
+      val lastBlock = generateBlocks(baseBlock, constraint, 0)
       lastBlock.transactionData should have size constraint.rest.toInt
     }
     }
